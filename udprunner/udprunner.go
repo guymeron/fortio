@@ -64,6 +64,12 @@ func (udpstate *RunnerResults) Run(_ context.Context, t periodic.ThreadID) (bool
 	return true, UDPStatusOK
 }
 
+func (udpstate *RunnerResults) RunWithMetadata(ctx context.Context, id periodic.ThreadID) (bool, string, map[string][]string) {
+	s, d := udpstate.Run(ctx,id)
+	return s, d, nil
+}
+
+
 // UDPOptions are options to the UDPClient.
 type UDPOptions struct {
 	Destination string

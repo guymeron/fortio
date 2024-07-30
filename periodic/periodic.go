@@ -60,6 +60,11 @@ type Runnable interface {
 	// with details being an optional string that can be put in the access logs.
 	// Statistics are split into two sets.
 	Run(ctx context.Context, id ThreadID) (status bool, details string)
+
+	//// RunWithHeader returns a boolean, true for normal/success, false otherwise.
+	//// with details being an optional string that can be put in the access logs.
+	//// Statistics are split into two sets.
+	RunWithMetadata(ctx context.Context, id ThreadID) (status bool, details string, metadata map[string][]string)
 }
 
 // MakeRunners creates an array of NumThreads identical Runnable instances
@@ -818,8 +823,20 @@ MainLoop:
 		if r.AccessLogger != nil {
 			ctx2 = r.AccessLogger.Start(ctx, id, i, fStart)
 		}
-		status, details := f.Run(ctx2, id)
-		latency := time.Since(fStart).Seconds()
+		status, details, metadata := f.RunWithMetadata(ctx2, id)
+		e2eDuration := time.Since(fStart)
+		latency := e2eDuration.Seconds()
+
+		if metadata != nil {
+			upstreamSvcTime := metadata["X-Envoy-Upstream-Service-Time"]
+			if upstreamSvcTime != nil {
+				duration, err := time.ParseDuration(fmt.Sprintf("%sms", upstreamSvcTime[0]))
+				if err == nil {
+					latency = (e2eDuration - duration).Seconds()
+				}
+			}
+		}
+
 		if r.AccessLogger != nil {
 			r.AccessLogger.Report(ctx2, id, i, fStart, latency, status, details)
 		}

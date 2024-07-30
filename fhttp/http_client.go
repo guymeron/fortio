@@ -52,6 +52,9 @@ type Fetcher interface {
 	// StreamFetch returns HTTP Status code and body bytes read
 	// (body is streamed to Dest writer or null), and header size for the fast client.
 	StreamFetch(ctx context.Context) (int, int64, uint)
+	// StreamFetchWithUpstreamLatency returns HTTP Status code and body bytes read
+	// (body is streamed to Dest writer or null), and header size for the fast client.
+	StreamFetchWithHeaders(ctx context.Context) (int, int64, uint, http.Header)
 	// HasBuffer is true for the fast client and false for golang standard library based client.
 	// it's used to know if calling Fetch() is actually better (fast client with headers to stderr)
 	HasBuffer() bool
@@ -492,6 +495,85 @@ func (c *Client) Fetch(ctx context.Context) (int, []byte, int) {
 	return status, buf.Bytes(), 0
 }
 
+
+func (c *Client) StreamFetchWithHeaders(ctx context.Context) (int, int64, uint, http.Header) {
+	// req can't be null (client itself would be null in that case)
+	var req *http.Request
+	if c.clientTrace != nil {
+		req = c.req.WithContext(httptrace.WithClientTrace(ctx, c.clientTrace(ctx)))
+	} else {
+		req = c.req.WithContext(ctx)
+	}
+	if c.pathContainsUUID {
+		path := c.path
+		for strings.Contains(path, uuidToken) {
+			path = strings.Replace(path, uuidToken, generateUUID(), 1)
+		}
+		req.URL.Path = path
+	}
+	if c.rawQueryContainsUUID {
+		rawQuery := c.rawQuery
+		for strings.Contains(rawQuery, uuidToken) {
+			rawQuery = strings.Replace(rawQuery, uuidToken, generateUUID(), 1)
+		}
+
+		req.URL.RawQuery = rawQuery
+	}
+	if c.bodyContainsUUID {
+		body := string(c.body)
+		for strings.Contains(body, uuidToken) {
+			body = strings.Replace(body, uuidToken, generateUUID(), 1)
+		}
+		bodyBytes := []byte(body)
+		req.ContentLength = int64(len(bodyBytes))
+		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	} else if len(c.body) > 0 {
+		req.Body = io.NopCloser(bytes.NewReader(c.body))
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		log.S(log.Error, "Unable to send request",
+			log.Attr("method", req.Method), log.Attr("url", c.url), log.Attr("err", err),
+			log.Attr("thread", c.id), log.Attr("run", c.runID))
+		return -1, -1, 0, nil
+	}
+	var data []byte
+	if log.LogDebug() {
+		if data, err = httputil.DumpResponse(resp, false); err != nil {
+			log.S(log.Error, "Unable to dump response", log.Attr("err", err), log.Attr("thread", c.id), log.Attr("run", c.runID))
+		} else {
+			log.Debugf("[%d] For URL %s, received:\n%s", c.id, c.url, data)
+		}
+	}
+	if c.dataWriter == nil {
+		c.dataWriter = io.Discard
+	}
+	var n int64
+	n, err = io.Copy(c.dataWriter, resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		log.S(log.Error, "Unable to read response",
+			log.Attr("err", err), log.Attr("thread", c.id), log.Attr("run", c.runID))
+		code := resp.StatusCode
+		if codeIsOK(code) {
+			code = http.StatusNoContent
+			log.S(log.Warning, "Ok code despite read error, switching code to 204", log.Attr("thread", c.id), log.Attr("run", c.runID))
+		}
+		return code, n, 0, nil
+	}
+	code := resp.StatusCode
+	log.Debugf("[%d] Got %d : %s for %s %s - response is %d bytes", c.id, code, resp.Status, req.Method, c.url, len(data))
+	if c.logErrors && !codeIsOK(code) {
+		log.S(log.Warning, "Non ok http code", log.Attr("code", code), log.Attr("thread", c.id), log.Attr("run", c.runID))
+	}
+
+	return code, n, 0, resp.Header
+}
+
+func (c *FastClient) StreamFetchWithHeaders(ctx context.Context) (int, int64, uint, http.Header) {
+	return 0, 0, 0, nil
+}
+
 // StreamFetch fetches the byte and code for pre-created std client.
 // header length (3rd returned value) is always 0 for that client
 // and only available with the fastclient.
@@ -577,10 +659,10 @@ func (c *Client) GetIPAddress() (*stats.Occurrence, *stats.Histogram) {
 // the DisableFastClient flag).
 func NewClient(o *HTTPOptions) (Fetcher, error) {
 	o.Init(o.URL) // For completely new options
-	if o.DisableFastClient {
-		return NewStdClient(o)
-	}
-	return NewFastClient(o)
+	//if o.DisableFastClient {
+	return NewStdClient(o)
+	//}
+	//return NewFastClient(o)
 }
 
 // Transport common interface between http.Transport and http2.Transport.

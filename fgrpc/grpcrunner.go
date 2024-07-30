@@ -128,6 +128,11 @@ func (grpcstate *GRPCRunnerResults) Run(outCtx context.Context, t periodic.Threa
 	return false, status.String()
 }
 
+func (grpcstate *GRPCRunnerResults) RunWithMetadata(ctx context.Context, id periodic.ThreadID) (status bool, details string, metadata map[string][]string) {
+	s, d := grpcstate.Run(ctx,id)
+	return s, d, nil
+}
+
 // GRPCRunnerOptions includes the base RunnerOptions plus gRPC specific
 // options.
 type GRPCRunnerOptions struct {

@@ -60,6 +60,11 @@ func (tcpstate *RunnerResults) Run(_ context.Context, t periodic.ThreadID) (bool
 	return true, TCPStatusOK
 }
 
+func (tcpstate *RunnerResults) RunWithMetadata(ctx context.Context, id periodic.ThreadID) (bool, string, map[string][]string) {
+	s, d := tcpstate.Run(ctx,id)
+	return s, d, nil
+}
+
 // TCPOptions are options to the TCPClient.
 type TCPOptions struct {
 	Destination      string

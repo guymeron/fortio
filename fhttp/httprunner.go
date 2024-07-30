@@ -74,6 +74,23 @@ func (httpstate *HTTPRunnerResults) Run(ctx context.Context, t periodic.ThreadID
 	return codeIsOK(code), strconv.Itoa(code)
 }
 
+// RunWithHeader tests HTTP request fetching. Main call being run at the target QPS.
+// To be set as the Function in RunnerOptions.
+func (httpstate *HTTPRunnerResults) RunWithMetadata(ctx context.Context, t periodic.ThreadID) (bool, string,  map[string][]string) {
+	log.Debugf("Calling in %d", t)
+	code, size, headerSize, header := httpstate.client.StreamFetchWithHeaders(ctx)
+	log.Debugf("Got in %3d hsz %d sz %d - will abort on %d", code, headerSize, size, httpstate.AbortOn)
+	httpstate.RetCodes[code]++
+	httpstate.sizes.Record(float64(size))
+	httpstate.headerSizes.Record(float64(headerSize))
+	if httpstate.AbortOn == code {
+		httpstate.aborter.Abort(false)
+		log.S(log.Info, "Aborted run because of http code",
+			log.Attr("run", httpstate.RunID), log.Attr("code", code), log.Attr("size", size))
+	}
+	return codeIsOK(code), strconv.Itoa(code), header
+}
+
 // HTTPRunnerOptions includes the base RunnerOptions plus HTTP specific
 // options.
 type HTTPRunnerOptions struct {

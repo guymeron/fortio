@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"context"
 	"math"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -32,6 +33,10 @@ type Noop struct{}
 
 func (n *Noop) Run(context.Context, ThreadID) (bool, string) {
 	return true, ""
+}
+
+func (n *Noop) RunWithMetadata(context.Context, ThreadID) (bool, string, map[string][]string) {
+	return true, "", nil
 }
 
 // used for when we don't actually run periodic test/want to initialize
