@@ -829,10 +829,12 @@ MainLoop:
 
 		if metadata != nil {
 			upstreamSvcTime := metadata["X-Envoy-Upstream-Service-Time"]
+			log.Warnf("setupstreamSvcTime: %s", upstreamSvcTime)
 			if upstreamSvcTime != nil {
 				duration, err := time.ParseDuration(fmt.Sprintf("%sms", upstreamSvcTime[0]))
 				if err == nil {
 					latency = (e2eDuration - duration).Seconds()
+					log.Warnf("latency: %f", upstreamSvcTime)
 				}
 			}
 		}
