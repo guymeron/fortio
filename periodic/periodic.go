@@ -834,7 +834,7 @@ MainLoop:
 				duration, err := time.ParseDuration(fmt.Sprintf("%sms", upstreamSvcTime[0]))
 				if err == nil {
 					latency = (e2eDuration - duration).Seconds()
-					log.Warnf("latency: %f", upstreamSvcTime)
+					log.Warnf("latency: %v", upstreamSvcTime)
 				}
 			}
 		}
